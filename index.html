@@ -313,7 +313,86 @@ function updateRoundIndicator() {
     }
 }
 
+// 환경 감지
+function isKakaoInApp() {
+    const ua = navigator.userAgent || '';
+    return /KAKAOTALK/i.test(ua) || /kakao/i.test(ua);
+}
+function isLocalFile() {
+    return location.protocol === 'file:';
+}
+
+// 공통 안내 화면 렌더러
+function showGuideScreen({ emoji, title, desc, steps, btnLabel, btnAction, btnColor, btnShadow }) {
+    document.getElementById('loading-screen').innerHTML = `
+        <div style="padding:32px 24px;text-align:center;max-width:420px;margin:0 auto">
+            <div style="font-size:3.5rem;margin-bottom:10px">${emoji}</div>
+            <div style="font-size:1.35rem;color:#e53935;font-weight:bold;margin-bottom:10px;font-family:'Jua',sans-serif;line-height:1.4;">${title}</div>
+            <div style="font-size:0.98rem;color:#7B5B7B;line-height:1.8;margin-bottom:20px;font-family:'Nanum Gothic',sans-serif;">${desc}</div>
+            <div style="background:#FFF5F9;border-radius:16px;padding:16px 18px;margin-bottom:22px;font-family:'Nanum Gothic',sans-serif;font-size:0.93rem;color:#3D2B3D;line-height:2;text-align:left;">${steps}</div>
+            <button onclick="${btnAction}" style="width:100%;padding:16px;font-size:1.25rem;font-family:'Jua',sans-serif;background:${btnColor};color:${btnColor==='#FFE066'?'#3D2B3D':'white'};border:none;border-radius:40px;cursor:pointer;box-shadow:0 4px 0 ${btnShadow};margin-bottom:10px;">${btnLabel}</button>
+            <div id="copy-msg" style="font-size:0.9rem;color:#4CAF50;display:none;font-family:'Nanum Gothic',sans-serif;">✅ 주소가 복사되었어요! 브라우저에 붙여넣으세요.</div>
+        </div>`;
+}
+
+function showKakaoGuide() {
+    showGuideScreen({
+        emoji: '🙏',
+        title: '카카오톡에서는\n카메라를 쓸 수 없어요!',
+        desc: '이 게임은 카메라가 필요해요.<br><b>외부 브라우저</b>로 열어야 해요 😊',
+        steps: `<b>📱 Android</b><br>
+오른쪽 상단 <b>⋮ 메뉴</b> → <b>"다른 브라우저로 열기"</b><br><br>
+<b>🍎 iPhone</b><br>
+하단 <b>공유(↑)</b> → <b>"Safari로 열기"</b>`,
+        btnLabel: '🔗 게임 주소 복사하기',
+        btnAction: 'copyUrl()',
+        btnColor: '#FF6B9D',
+        btnShadow: '#cc4a7a'
+    });
+}
+
+function showLocalFileGuide() {
+    showGuideScreen({
+        emoji: '📂',
+        title: 'PC 파일로는 카메라를\n사용할 수 없어요!',
+        desc: '보안 정책상 <b>로컬 파일(file://)</b>에서는<br>카메라 접근이 차단돼요.<br>아래 방법 중 하나를 사용해 주세요 😊',
+        steps: `<b>📱 스마트폰에서 사용하는 경우</b><br>
+파일을 <b>웹서버에 업로드</b>하고<br>
+링크를 카카오톡으로 공유하세요<br><br>
+<b>💻 PC에서 테스트하는 경우</b><br>
+터미널에서 <code style="background:#ffe;padding:2px 6px;border-radius:4px;">npx serve .</code> 실행 후<br>
+<b>http://localhost:3000</b> 으로 접속하세요`,
+        btnLabel: '🔄 다시 시도',
+        btnAction: 'location.reload()',
+        btnColor: '#FFE066',
+        btnShadow: '#FFB300'
+    });
+}
+
+function copyUrl() {
+    const url = location.href;
+    const tryClipboard = () => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(url);
+        }
+        const ta = document.createElement('textarea');
+        ta.value = url; document.body.appendChild(ta);
+        ta.select(); document.execCommand('copy');
+        document.body.removeChild(ta);
+        return Promise.resolve();
+    };
+    tryClipboard().then(() => {
+        const el = document.getElementById('copy-msg');
+        if (el) el.style.display = 'block';
+    });
+}
+
 async function init() {
+    // 1) 카카오톡 인앱 브라우저
+    if (isKakaoInApp()) { showKakaoGuide(); return; }
+    // 2) 로컬 파일 (file://)
+    if (isLocalFile()) { showLocalFileGuide(); return; }
+
     try {
         setLoadingMsg('📷 카메라 권한을 확인하고 있어요...', 15);
         await navigator.mediaDevices.getUserMedia({video:true});
@@ -336,15 +415,32 @@ async function init() {
         window.requestAnimationFrame(loop);
     } catch(e) {
         console.error(e);
-        const msg = e.name==='NotAllowedError'
-            ? '카메라 사용을 허용해주세요!\n브라우저 주소창 옆 자물쇠 아이콘을 눌러\n카메라를 허용으로 바꿔주세요.'
-            : 'AI 모델을 불러오지 못했어요.\n인터넷 연결을 확인하고\n새로고침 해주세요!\n(' + e.message + ')';
-        document.getElementById('loading-screen').innerHTML =
-            `<div style="padding:40px;text-align:center">
-                <div style="font-size:3rem">😢</div>
-                <div style="font-size:1.2rem;color:#e53935;margin-top:16px;white-space:pre-line">${msg}</div>
-                <button onclick="location.reload()" style="margin-top:24px;padding:14px 40px;font-size:1.3rem;font-family:'Jua',sans-serif;background:#FF6B9D;color:white;border:none;border-radius:40px;cursor:pointer;">🔄 다시 시도</button>
-            </div>`;
+        let title, steps;
+        if (e.name === 'NotAllowedError') {
+            title = '카메라 권한을 허용해주세요!';
+            steps = `<b>📱 Android Chrome</b><br>
+주소창 왼쪽 🔒 아이콘 → 카메라 → <b>허용</b><br><br>
+<b>🍎 iPhone Safari</b><br>
+설정 → Safari → 카메라 → <b>허용</b>`;
+        } else if (e.name === 'NotFoundError' || /not found/i.test(e.message)) {
+            title = '카메라를 찾을 수 없어요!';
+            steps = `<b>스마트폰</b>에서 실행하고 있나요?<br>
+PC라면 웹캠을 연결하거나<br>
+<b>스마트폰 Chrome / Safari</b>로 열어주세요`;
+        } else {
+            title = 'AI 모델을 불러오지 못했어요';
+            steps = `인터넷 연결을 확인하고 다시 시도해 주세요<br><br><span style="font-size:0.8rem;color:#aaa;">${e.message}</span>`;
+        }
+        showGuideScreen({
+            emoji: '😢',
+            title,
+            desc: '아래 방법을 따라해 보세요 😊',
+            steps,
+            btnLabel: '🔄 다시 시도',
+            btnAction: 'location.reload()',
+            btnColor: '#FF6B9D',
+            btnShadow: '#cc4a7a'
+        });
     }
 }
 
