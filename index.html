@@ -2,51 +2,734 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>하늘반 AI 봄꽃 탐험대!</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌸 봄꽃 AI 카드 탐험대!</title>
+    <link href="https://fonts.googleapis.com/css2?family=Jua&family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.3/dist/teachablemachine-image.min.js"></script>
     <style>
-        body { margin: 0; text-align: center; background: #f1f8e9; font-family: 'Nanum Gothic', sans-serif; }
-        #video-container { position: relative; width: 640px; margin: 20px auto; border: 15px solid #fff; border-radius: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); background: white; }
-        video { width: 100%; border-radius: 15px; transform: scaleX(-1); }
-        #overlay { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); width: 90%; z-index: 10; }
-        .info-box { background: rgba(255,255,255,0.95); padding: 10px 20px; border-radius: 25px; font-size: 1.4rem; font-weight: bold; margin-bottom: 8px; border: 3px solid #c8e6c9; }
-        #target-flower { font-size: 2.8rem; color: #e91e63; margin: 5px 0; display: block; }
-        #dance-guide { font-size: 1.2rem; color: #555; background: #fffde7; padding: 10px; border-radius: 15px; border: 2px dashed #ffd54f; }
-        #timer-box { font-size: 3rem; color: #f44336; font-weight: 900; text-shadow: 2px 2px #fff; }
-        #result-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.98); flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
-        .final-msg { font-size: 3rem; color: #4caf50; margin-bottom: 20px; }
-        #loading { font-size: 1.8rem; color: #2e7d32; margin-top: 100px; font-weight: bold; }
-        .success-flash { animation: flash 0.5s; }
-        @keyframes flash { from { border-color: #4caf50; } to { border-color: #fff; } }
+        :root {
+            --pink: #FF6B9D;
+            --pink-light: #FFD6E7;
+            --yellow: #FFE066;
+            --yellow-dark: #FFB300;
+            --green: #4CAF50;
+            --green-light: #C8E6C9;
+            --bg: #FFF5F9;
+            --white: #FFFFFF;
+            --text-dark: #3D2B3D;
+            --text-mid: #7B5B7B;
+            --red: #FF5252;
+            --blue: #42A5F5;
+            --shadow: 0 8px 32px rgba(255, 107, 157, 0.18);
+            --radius: 24px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Jua', sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 꽃잎 배경 애니메이션 */
+        .petal {
+            position: fixed;
+            top: -40px;
+            font-size: 24px;
+            animation: fall linear infinite;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.6;
+        }
+        @keyframes fall {
+            0% { transform: translateY(-40px) rotate(0deg); opacity: 0.7; }
+            100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+        }
+
+        /* 로딩 화면 */
+        #loading-screen {
+            position: fixed; inset: 0;
+            background: linear-gradient(135deg, #FFE4F0 0%, #FFF5F9 50%, #E8F5FF 100%);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 1000;
+        }
+        .loading-flower {
+            font-size: 80px;
+            animation: bounce 1s ease-in-out infinite alternate;
+        }
+        @keyframes bounce {
+            0% { transform: translateY(0) scale(1); }
+            100% { transform: translateY(-20px) scale(1.1); }
+        }
+        .loading-text {
+            font-size: 1.8rem;
+            color: var(--pink);
+            margin-top: 24px;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .loading-dots span {
+            animation: blink 1.2s infinite;
+            font-size: 2rem;
+        }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink {
+            0%, 80%, 100% { opacity: 0; }
+            40% { opacity: 1; }
+        }
+
+        /* 게임 시작 화면 */
+        #start-screen {
+            display: none;
+            position: fixed; inset: 0;
+            background: linear-gradient(160deg, #FFD6E7 0%, #FFF5F9 60%, #D6F0FF 100%);
+            flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 900;
+            text-align: center;
+            padding: 20px;
+        }
+        .game-title {
+            font-size: 3.5rem;
+            color: var(--pink);
+            text-shadow: 3px 3px 0px var(--pink-light);
+            margin-bottom: 12px;
+            line-height: 1.2;
+        }
+        .game-subtitle {
+            font-size: 1.4rem;
+            color: var(--text-mid);
+            margin-bottom: 40px;
+        }
+        .start-flowers {
+            display: flex; gap: 16px;
+            font-size: 40px;
+            margin-bottom: 40px;
+            animation: wiggle 2s ease-in-out infinite;
+        }
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(-3deg); }
+            50% { transform: rotate(3deg); }
+        }
+        .btn-start {
+            background: var(--pink);
+            color: white;
+            border: none;
+            padding: 20px 60px;
+            font-size: 2rem;
+            font-family: 'Jua', sans-serif;
+            border-radius: 60px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #cc4a7a, 0 12px 24px rgba(255, 107, 157, 0.4);
+            transition: all 0.15s;
+            position: relative;
+            top: 0;
+        }
+        .btn-start:active {
+            top: 4px;
+            box-shadow: 0 2px 0 #cc4a7a, 0 4px 12px rgba(255, 107, 157, 0.3);
+        }
+
+        /* 메인 게임 화면 */
+        #game-screen {
+            display: none;
+            min-height: 100vh;
+            padding: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 상단 HUD */
+        .game-hud {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 680px;
+            margin: 0 auto 16px;
+            gap: 12px;
+        }
+        .hud-card {
+            background: var(--white);
+            border-radius: 16px;
+            padding: 10px 20px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            flex: 1;
+        }
+        .hud-label {
+            font-size: 0.85rem;
+            color: var(--text-mid);
+            font-family: 'Nanum Gothic', sans-serif;
+        }
+        .hud-value {
+            font-size: 1.8rem;
+            color: var(--text-dark);
+            font-weight: 900;
+        }
+        .hud-value.timer-warning { color: var(--red); animation: pulse 0.5s ease-in-out infinite alternate; }
+        @keyframes pulse { 0% { transform: scale(1); } 100% { transform: scale(1.15); } }
+
+        /* 목표 꽃 카드 */
+        .target-card {
+            max-width: 680px;
+            margin: 0 auto 16px;
+            background: var(--white);
+            border-radius: var(--radius);
+            padding: 20px 24px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            border: 4px solid var(--pink-light);
+            position: relative;
+            overflow: hidden;
+        }
+        .target-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 6px;
+            background: linear-gradient(90deg, var(--pink), var(--yellow), var(--green), var(--blue), var(--pink));
+            background-size: 200% 100%;
+            animation: rainbow 2s linear infinite;
+        }
+        @keyframes rainbow { 0% { background-position: 0%; } 100% { background-position: 200%; } }
+        .find-label {
+            font-size: 1rem;
+            color: var(--text-mid);
+            font-family: 'Nanum Gothic', sans-serif;
+            margin-bottom: 4px;
+        }
+        .target-flower-name {
+            font-size: 3.2rem;
+            color: var(--pink);
+            text-shadow: 2px 2px 0px var(--pink-light);
+            line-height: 1;
+        }
+
+        /* AI 피드백 바 */
+        .feedback-bar {
+            max-width: 680px;
+            margin: 0 auto 16px;
+            background: var(--white);
+            border-radius: 16px;
+            padding: 12px 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .feedback-label {
+            font-family: 'Nanum Gothic', sans-serif;
+            font-size: 0.9rem;
+            color: var(--text-mid);
+            white-space: nowrap;
+        }
+        .prob-bar-wrap {
+            flex: 1;
+            background: #f5f5f5;
+            border-radius: 20px;
+            height: 20px;
+            overflow: hidden;
+        }
+        .prob-bar-fill {
+            height: 100%;
+            border-radius: 20px;
+            background: linear-gradient(90deg, var(--pink), var(--yellow));
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        .prob-value {
+            font-size: 1rem;
+            color: var(--text-dark);
+            min-width: 40px;
+            text-align: right;
+        }
+
+        /* 카메라 영역 */
+        .camera-wrap {
+            max-width: 680px;
+            margin: 0 auto;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: 0 12px 40px rgba(255, 107, 157, 0.25);
+            border: 6px solid var(--white);
+            position: relative;
+            background: #222;
+            transition: border-color 0.3s;
+        }
+        .camera-wrap.success { border-color: var(--green); }
+        .camera-wrap.fail { border-color: var(--red); }
+        #webcam-canvas {
+            width: 100%;
+            display: block;
+            transform: scaleX(-1);
+        }
+
+        /* 인식 성공 오버레이 */
+        .success-overlay {
+            position: absolute; inset: 0;
+            background: rgba(76, 175, 80, 0.85);
+            display: none;
+            flex-direction: column;
+            align-items: center; justify-content: center;
+            font-size: 5rem;
+            animation: pop 0.4s ease;
+            z-index: 10;
+        }
+        .success-overlay.show { display: flex; }
+        @keyframes pop {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .success-text {
+            font-size: 2rem;
+            color: white;
+            margin-top: 12px;
+        }
+
+        /* 시간 초과 오버레이 */
+        .timeout-overlay {
+            position: absolute; inset: 0;
+            background: rgba(255, 82, 82, 0.8);
+            display: none;
+            flex-direction: column;
+            align-items: center; justify-content: center;
+            font-size: 4rem;
+            z-index: 10;
+        }
+        .timeout-overlay.show { display: flex; }
+        .timeout-text {
+            font-size: 1.8rem;
+            color: white;
+            margin-top: 12px;
+        }
+
+        /* 라운드 진행 표시기 */
+        .round-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 16px auto;
+            max-width: 680px;
+        }
+        .round-dot {
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            background: #ddd;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.85rem;
+            color: #aaa;
+            font-family: 'Nanum Gothic', sans-serif;
+            transition: all 0.3s;
+        }
+        .round-dot.done { background: var(--green); color: white; }
+        .round-dot.done-fail { background: var(--red); color: white; }
+        .round-dot.current { background: var(--pink); color: white; animation: pulse 0.8s ease-in-out infinite alternate; }
+
+        /* 결과 화면 */
+        #result-screen {
+            display: none;
+            position: fixed; inset: 0;
+            background: linear-gradient(160deg, #FFD6E7 0%, #FFF5F9 60%, #D6F0FF 100%);
+            flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 950;
+            text-align: center;
+            padding: 24px;
+        }
+        .result-trophy { font-size: 80px; animation: bounce 1s ease-in-out infinite alternate; }
+        .result-title {
+            font-size: 2.8rem;
+            color: var(--pink);
+            margin: 16px 0 8px;
+        }
+        .result-msg {
+            font-size: 1.3rem;
+            color: var(--text-mid);
+            margin-bottom: 32px;
+        }
+        .score-big {
+            font-size: 5rem;
+            color: var(--yellow-dark);
+            text-shadow: 3px 3px 0px rgba(255, 179, 0, 0.3);
+            line-height: 1;
+        }
+        .score-sub {
+            font-size: 1.2rem;
+            color: var(--text-mid);
+            margin-bottom: 32px;
+            font-family: 'Nanum Gothic', sans-serif;
+        }
+        .result-flowers-row {
+            display: flex; gap: 12px; flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 32px;
+        }
+        .result-flower-chip {
+            display: flex; align-items: center; gap: 6px;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 1.1rem;
+            font-family: 'Nanum Gothic', sans-serif;
+        }
+        .result-flower-chip.found { background: var(--green-light); color: #2E7D32; }
+        .result-flower-chip.missed { background: #FFEBEE; color: #C62828; }
+        .btn-retry {
+            background: var(--yellow);
+            color: var(--text-dark);
+            border: none;
+            padding: 18px 56px;
+            font-size: 1.8rem;
+            font-family: 'Jua', sans-serif;
+            border-radius: 60px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 var(--yellow-dark), 0 12px 24px rgba(255, 179, 0, 0.3);
+            transition: all 0.15s;
+            position: relative; top: 0;
+        }
+        .btn-retry:active {
+            top: 4px;
+            box-shadow: 0 2px 0 var(--yellow-dark), 0 4px 12px rgba(255, 179, 0, 0.2);
+        }
     </style>
 </head>
 <body>
 
-    <div id="loading">🌸 AI 선생님이 꽃을 기억해내고 있어요... 🌸<br><br>잠시만 기다려 주세요!</div>
+<!-- 꽃잎 애니메이션 -->
+<script>
+    const petalEmojis = ['🌸', '🌼', '🌺', '🌷', '🌻'];
+    for (let i = 0; i < 12; i++) {
+        const el = document.createElement('div');
+        el.className = 'petal';
+        el.textContent = petalEmojis[Math.floor(Math.random() * petalEmojis.length)];
+        el.style.left = Math.random() * 100 + 'vw';
+        el.style.fontSize = (16 + Math.random() * 20) + 'px';
+        el.style.animationDuration = (6 + Math.random() * 10) + 's';
+        el.style.animationDelay = (Math.random() * 10) + 's';
+        document.body.appendChild(el);
+    }
+</script>
 
-    <div id="video-container" style="display:none;">
-        <video id="webcam" autoplay playsinline></video>
-        <div id="overlay">
-            <div class="info-box">라운드: <span id="round-num">1</span> / 6</div>
-            <div class="info-box">
-                찾아야 할 꽃:<br>
-                <span id="target-flower">준비...</span>
-                <div id="dance-guide">동작을 준비하세요!</div>
-            </div>
-            <div id="timer-box">20</div>
+<!-- 로딩 화면 -->
+<div id="loading-screen">
+    <div class="loading-flower">🌸</div>
+    <div class="loading-text">
+        <div id="loading-msg">AI 선생님이 꽃을 열심히 공부하고 있어요!</div>
+        <div class="loading-dots">
+            <span>●</span><span>●</span><span>●</span>
+        </div>
+    </div>
+</div>
+
+<!-- 시작 화면 -->
+<div id="start-screen">
+    <div class="game-title">🌸 봄꽃 카드<br>탐험대!</div>
+    <div class="game-subtitle">AI가 꽃 카드를 알아볼게요!</div>
+    <div class="start-flowers">🌸🌼🌺🌷🌻</div>
+    <button class="btn-start" id="btn-start-game">게임 시작! 🚀</button>
+</div>
+
+<!-- 메인 게임 화면 -->
+<div id="game-screen">
+    <div class="game-hud">
+        <div class="hud-card">
+            <div class="hud-label">라운드</div>
+            <div class="hud-value"><span id="round-num">1</span><span style="font-size:1rem;color:var(--text-mid)">/6</span></div>
+        </div>
+        <div class="hud-card">
+            <div class="hud-label">점수</div>
+            <div class="hud-value" style="color:var(--green)" id="score-display">0</div>
+        </div>
+        <div class="hud-card">
+            <div class="hud-label">남은 시간</div>
+            <div class="hud-value" id="timer-display">20</div>
         </div>
     </div>
 
-    <div id="result-screen">
-        <div class="final-msg">🌼 대단해요! 탐험 성공! 🌼</div>
-        <p style="font-size: 2.2rem;">우리 친구들이 찾은 꽃은 총 <span id="final-score" style="color:#e91e63; font-weight:bold;">0</span>개입니다!</p>
-        <button style="padding: 20px 50px; font-size: 1.5rem; background: #81c784; color: white; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 5px #66bb6a;" onclick="location.reload()">다시 하기</button>
+    <div class="target-card">
+        <div class="find-label">이 꽃 카드를 찾아보세요! 👀</div>
+        <div class="target-flower-name" id="target-flower-name">준비 중...</div>
     </div>
 
-    <script>
-        // 선생님께서 보내주신 모델 URL 적용
-        const URL = "https://teachablemachine.withgoogle.com/models/6YUmfQwy2/"; 
+    <div class="feedback-bar">
+        <div class="feedback-label">AI 인식률</div>
+        <div class="prob-bar-wrap">
+            <div class="prob-bar-fill" id="prob-bar"></div>
+        </div>
+        <div class="prob-value" id="prob-value">0%</div>
+    </div>
 
-        const flowers = [
-            { name: "벚꽃", emoji: "🌸", dance: "뱅글뱅글 회
+    <div class="camera-wrap" id="camera-wrap">
+        <canvas id="webcam-canvas"></canvas>
+        <div class="success-overlay" id="success-overlay">
+            <div>🎉</div>
+            <div class="success-text">정답이에요!</div>
+        </div>
+        <div class="timeout-overlay" id="timeout-overlay">
+            <div>⏰</div>
+            <div class="timeout-text">시간 초과!</div>
+        </div>
+    </div>
+
+    <div class="round-indicator" id="round-indicator"></div>
+</div>
+
+<!-- 결과 화면 -->
+<div id="result-screen">
+    <div class="result-trophy" id="result-trophy">🏆</div>
+    <div class="result-title" id="result-title">게임 종료!</div>
+    <div class="result-msg" id="result-msg">정말 잘했어요!</div>
+    <div class="score-big" id="final-score">0</div>
+    <div class="score-sub">/ 6개 찾음</div>
+    <div class="result-flowers-row" id="result-flower-list"></div>
+    <button class="btn-retry" onclick="location.reload()">🔄 다시 하기!</button>
+</div>
+
+<script>
+    function setLoadingMsg(msg) {
+        const el = document.getElementById('loading-msg');
+        if (el) el.textContent = msg;
+    }
+
+    const MODEL_URL = "https://teachablemachine.withgoogle.com/models/6YUmfQwy2/";
+    const ALL_FLOWERS = ["벚꽃", "튤립", "목련", "진달래", "개나리", "민들레", "매화", "산수유", "철쭉"];
+    const TOTAL_ROUNDS = 6;
+    const ROUND_TIME = 20;
+
+    let gameList = [], currentRound = 0, score = 0;
+    let timeLeft = ROUND_TIME, timerInterval;
+    let model, webcam;
+    let isRecognized = false;
+    let roundResults = []; // true = 성공, false = 실패
+    let currentProb = 0;
+    let gameRunning = false;
+
+    // 라운드 인디케이터 초기화
+    function initRoundIndicator() {
+        const el = document.getElementById('round-indicator');
+        el.innerHTML = '';
+        for (let i = 0; i < TOTAL_ROUNDS; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'round-dot' + (i === 0 ? ' current' : '');
+            dot.id = 'dot-' + i;
+            dot.textContent = i + 1;
+            el.appendChild(dot);
+        }
+    }
+
+    function updateRoundIndicator() {
+        for (let i = 0; i < TOTAL_ROUNDS; i++) {
+            const dot = document.getElementById('dot-' + i);
+            dot.className = 'round-dot';
+            if (i < currentRound) {
+                dot.className += roundResults[i] ? ' done' : ' done-fail';
+                dot.textContent = roundResults[i] ? '✓' : '✗';
+            } else if (i === currentRound) {
+                dot.className += ' current';
+                dot.textContent = i + 1;
+            } else {
+                dot.textContent = i + 1;
+            }
+        }
+    }
+
+    async function init() {
+        const modelURL = MODEL_URL + "model.json";
+        const metadataURL = MODEL_URL + "metadata.json";
+
+        try {
+            // 1단계: 카메라 권한 먼저 요청
+            setLoadingMsg('📷 카메라 권한을 확인하고 있어요...');
+            await navigator.mediaDevices.getUserMedia({ video: true });
+
+            // 2단계: AI 모델 로드
+            setLoadingMsg('🧠 AI 선생님이 꽃을 공부하고 있어요...');
+            model = await tmImage.load(modelURL, metadataURL);
+
+            // 3단계: 웹캠 설정
+            setLoadingMsg('📸 카메라를 연결하고 있어요...');
+            const flip = true;
+            webcam = new tmImage.Webcam(640, 480, flip);
+            await webcam.setup();
+            await webcam.play();
+
+            // 캔버스에 웹캠 연결
+            const canvas = document.getElementById('webcam-canvas');
+            canvas.width = 640;
+            canvas.height = 480;
+
+            setLoadingMsg('✅ 준비 완료!');
+            await new Promise(r => setTimeout(r, 500));
+
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('start-screen').style.display = 'flex';
+
+            window.requestAnimationFrame(loop);
+        } catch(e) {
+            console.error(e);
+            const msg = e.name === 'NotAllowedError'
+                ? '카메라 사용을 허용해주세요!\n브라우저 주소창 옆 🔒 아이콘을 눌러\n카메라를 허용으로 바꿔주세요.'
+                : 'AI 모델을 불러오지 못했어요.\n인터넷 연결을 확인하고\n새로고침 해주세요! (' + e.message + ')';
+            document.getElementById('loading-screen').innerHTML =
+                `<div style="padding:40px;text-align:center">
+                    <div style="font-size:3rem">😢</div>
+                    <div style="font-size:1.3rem;color:#e53935;margin-top:16px;white-space:pre-line">${msg}</div>
+                    <button onclick="location.reload()" style="margin-top:24px;padding:14px 40px;font-size:1.3rem;font-family:'Jua',sans-serif;background:#FF6B9D;color:white;border:none;border-radius:40px;cursor:pointer;">🔄 다시 시도</button>
+                </div>`;
+        }
+    }
+
+    async function loop() {
+        webcam.update();
+        const canvas = document.getElementById('webcam-canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(webcam.canvas, 0, 0);
+
+        if (gameRunning) await predict();
+        window.requestAnimationFrame(loop);
+    }
+
+    async function predict() {
+        if (isRecognized) return;
+        const prediction = await model.predict(webcam.canvas);
+
+        // 현재 목표 꽃의 확률 찾기
+        let targetProb = 0;
+        let highestProb = 0, bestFlower = '';
+        for (let p of prediction) {
+            if (p.probability > highestProb) {
+                highestProb = p.probability;
+                bestFlower = p.className;
+            }
+            if (p.className === gameList[currentRound]) {
+                targetProb = p.probability;
+            }
+        }
+
+        // 피드백 바 업데이트
+        currentProb = targetProb;
+        const pct = Math.round(targetProb * 100);
+        document.getElementById('prob-bar').style.width = pct + '%';
+        document.getElementById('prob-value').textContent = pct + '%';
+
+        // 인식 성공 판정
+        if (highestProb > 0.90 && bestFlower === gameList[currentRound]) {
+            isRecognized = true;
+            clearInterval(timerInterval);
+            score++;
+            roundResults[currentRound] = true;
+            document.getElementById('score-display').textContent = score;
+
+            const cw = document.getElementById('camera-wrap');
+            cw.classList.add('success');
+            document.getElementById('success-overlay').classList.add('show');
+
+            setTimeout(() => {
+                cw.classList.remove('success');
+                document.getElementById('success-overlay').classList.remove('show');
+                currentRound++;
+                nextRound();
+            }, 1200);
+        }
+    }
+
+    function startGame() {
+        gameList = ALL_FLOWERS.slice().sort(() => 0.5 - Math.random()).slice(0, TOTAL_ROUNDS);
+        currentRound = 0;
+        score = 0;
+        roundResults = [];
+        gameRunning = true;
+        document.getElementById('score-display').textContent = '0';
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('game-screen').style.display = 'block';
+        initRoundIndicator();
+        nextRound();
+    }
+
+    function nextRound() {
+        document.getElementById('prob-bar').style.width = '0%';
+        document.getElementById('prob-value').textContent = '0%';
+        document.getElementById('timer-display').classList.remove('timer-warning');
+
+        if (currentRound >= TOTAL_ROUNDS) {
+            showResult();
+            return;
+        }
+
+        isRecognized = false;
+        timeLeft = ROUND_TIME;
+        document.getElementById('round-num').textContent = currentRound + 1;
+        document.getElementById('target-flower-name').textContent = gameList[currentRound];
+        document.getElementById('timer-display').textContent = timeLeft;
+        updateRoundIndicator();
+
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            const timerEl = document.getElementById('timer-display');
+            timerEl.textContent = timeLeft;
+
+            if (timeLeft <= 5) timerEl.classList.add('timer-warning');
+            else timerEl.classList.remove('timer-warning');
+
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                if (!isRecognized) {
+                    roundResults[currentRound] = false;
+                    isRecognized = true;
+                    const cw = document.getElementById('camera-wrap');
+                    cw.classList.add('fail');
+                    document.getElementById('timeout-overlay').classList.add('show');
+                    setTimeout(() => {
+                        cw.classList.remove('fail');
+                        document.getElementById('timeout-overlay').classList.remove('show');
+                        isRecognized = false;
+                        currentRound++;
+                        nextRound();
+                    }, 1000);
+                }
+            }
+        }, 1000);
+    }
+
+    function showResult() {
+        gameRunning = false;
+        clearInterval(timerInterval);
+
+        document.getElementById('game-screen').style.display = 'none';
+        document.getElementById('result-screen').style.display = 'flex';
+        document.getElementById('final-score').textContent = score;
+
+        // 트로피 / 메시지 결정
+        const ratio = score / TOTAL_ROUNDS;
+        let trophy = '🏆', title = '게임 종료!', msg = '';
+        if (ratio === 1) { trophy = '🥇'; title = '완벽해요!'; msg = '6개 모두 찾았어요! 꽃 박사님!'; }
+        else if (ratio >= 0.67) { trophy = '🌟'; title = '대단해요!'; msg = '정말 잘했어요! 거의 다 찾았어요!'; }
+        else if (ratio >= 0.33) { trophy = '👍'; title = '잘했어요!'; msg = '다음에는 더 잘할 수 있어요!'; }
+        else { trophy = '🌱'; title = '도전해요!'; msg = '다시 도전해보세요, 할 수 있어요!'; }
+
+        document.getElementById('result-trophy').textContent = trophy;
+        document.getElementById('result-title').textContent = title;
+        document.getElementById('result-msg').textContent = msg;
+
+        // 꽃 결과 칩 표시
+        const list = document.getElementById('result-flower-list');
+        list.innerHTML = '';
+        for (let i = 0; i < TOTAL_ROUNDS; i++) {
+            const chip = document.createElement('div');
+            chip.className = 'result-flower-chip ' + (roundResults[i] ? 'found' : 'missed');
+            chip.innerHTML = (roundResults[i] ? '✓ ' : '✗ ') + gameList[i];
+            list.appendChild(chip);
+        }
+    }
+
+    document.getElementById('btn-start-game').addEventListener('click', startGame);
+    init();
+</script>
+</body>
+</html>
